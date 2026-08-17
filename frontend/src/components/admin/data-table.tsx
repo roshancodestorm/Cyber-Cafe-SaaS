@@ -12,11 +12,11 @@ export interface Column<T> {
   align?: "left" | "center" | "right";
 }
 
-interface DataTableProps<T extends Record<string, unknown>> {
+interface DataTableProps<T> {
   columns: Column<T>[];
   data: T[];
   searchable?: boolean;
-  searchKeys?: (keyof T)[];
+  searchKeys?: (keyof T & string)[];
   onRowClick?: (row: T) => void;
   emptyMessage?: string;
   title?: string;
@@ -24,7 +24,7 @@ interface DataTableProps<T extends Record<string, unknown>> {
   maxHeight?: string;
 }
 
-export function DataTable<T extends Record<string, unknown>>({
+export function DataTable<T extends object>({
   columns,
   data,
   searchable,

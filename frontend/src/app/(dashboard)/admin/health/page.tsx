@@ -6,7 +6,7 @@ import { MiniChart } from "@/components/admin/mini-chart";
 import { mockSystemServices } from "@/lib/mock/admin-data";
 
 export default function SystemHealthPage() {
-  const allHealthy = mockSystemServices.every(s => s.status === "Healthy");
+  const allHealthy = mockSystemServices.every(s => s.status === "healthy");
 
   return (
     <div className="space-y-6 admin-fade-in pb-8">
@@ -36,8 +36,8 @@ export default function SystemHealthPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {mockSystemServices.map((srv) => {
-          const isHealthy = srv.status === "Healthy";
-          const isDown = srv.status === "Down";
+          const isHealthy = srv.status === "healthy";
+          const isDown = srv.status === "down";
           const color = isHealthy ? "var(--admin-success)" : isDown ? "var(--admin-danger)" : "var(--admin-warning)";
           return (
             <GlassCard key={srv.name} padding={true} glow={isHealthy ? "success" : isDown ? "danger" : "warning"}>

@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/cybercafe
+    depends_on:
+      - db
+
+  db:
+    image: postgres:13
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: cybercafe
+
+  redis:
+    image: redis:6-alpine
+    ports:
+      - "6379:6379"
+
+  worker:
+    build: .
+    command: python -m app.workers.document_deletion_worker
+    depends_on:
+      - db
+      - redis
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/cybercafe
+      REDIS_URL: redis://redis:6379/0
+
+volumes:
+  postgres_data:

@@ -1,8 +1,4 @@
-FROM python:3.10-slim-buster
-
-RUN apt-get update && apt-get install -y \
-    libmagic1 \
-    && rm -rf /var/lib/apt/lists/*
+FROM python:3.10-slim
 
 WORKDIR /app
 

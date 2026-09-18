@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Activity, Users, Store, Layers, Shield, Bell, Trash2, Printer, Bot } from "lucide-react";
 import { GlassCard } from "@/components/admin/glass-card";
 import { StatWidget } from "@/components/admin/stat-widget";
@@ -26,6 +29,34 @@ const QUEUES = [
 ];
 
 export default function AdminOverviewPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === "loading") return;
+    if (!session) {
+      router.replace("/login?from=%2Fadmin");
+      return;
+    }
+    const role = (session.user as any)?.role;
+    if (role !== "admin") {
+      router.replace("/user");
+    }
+  }, [status, session, router]);
+
+  if (status === "loading" || !session) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  const role = (session.user as any)?.role;
+  if (role !== "admin") {
+    return null;
+  }
+
   return (
     <div className="space-y-6 admin-fade-in pb-8">
       {/* Header */}

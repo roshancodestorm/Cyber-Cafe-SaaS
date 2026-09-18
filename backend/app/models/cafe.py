@@ -23,6 +23,9 @@ class Cafe(Base):
     available_services = Column(JSON, nullable=True, default=list)
     opening_hours = Column(JSON, nullable=True, default=dict)
     timezone = Column(String, nullable=True, default='UTC')
+    availability = Column(String, nullable=True, default='OPEN')  # OPEN/BUSY/AWAY/CLOSED
+    current_queue = Column(Integer, nullable=True, default=0)
+    estimated_wait_minutes = Column(Integer, nullable=True, default=0)
     description = Column(Text, nullable=True)
     public_display_name = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=True, index=True, default=datetime.utcnow)

@@ -1,4 +1,7 @@
+from typing import Optional
+
 from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -6,6 +9,8 @@ from app.core.roles import UserRole
 from app.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService, oauth2_scheme
 from app.models.user import User
+
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="api/v1/token", auto_error=False)
 
 def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
     user_repo = UserRepository(db)
@@ -18,6 +23,22 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
+
+def get_optional_current_user(
+    db: Session = Depends(get_db),
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+) -> Optional[User]:
+    if not token:
+        return None
+    try:
+        user_repo = UserRepository(db)
+        auth_service = AuthService(user_repo)
+        return auth_service.get_current_user(token, HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+        ))
+    except HTTPException:
+        return None
 
 def require_role(role: UserRole):
     def role_checker(current_user: User = Depends(get_current_user)) -> User:

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MapsCafeDiscovery } from "@/components/discovery/maps-cafe-discovery";
 import { Button } from "@/components/ui/button";

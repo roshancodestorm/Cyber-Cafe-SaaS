@@ -5,7 +5,7 @@ import uuid
 
 from app.core.database import get_db
 from app.repositories.user_repository import UserRepository
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import UserCreate, UserLogin, UserResponse
 from app.schemas.token import Token
 from app.services.auth_service import AuthService
 
@@ -21,9 +21,15 @@ def register_user(user_create: UserCreate, db: Session = Depends(get_db)):
             detail="Email already registered"
         )
     # For simplicity, tenant_id is generated here. In a real app, it might come from context or another service.
-    tenant_id = uuid.uuid4()
+    tenant_id = user_create.tenant_id or uuid.uuid4()
     new_user = user_repo.create_user(user_create, tenant_id)
     return UserResponse.from_orm(new_user)
+
+@router.post("/login", response_model=Token)
+def login_json(login_data: UserLogin, db: Session = Depends(get_db)):
+    user_repo = UserRepository(db)
+    auth_service = AuthService(user_repo)
+    return auth_service.authenticate_user_by_email(login_data.email, login_data.password)
 
 @router.post("/token", response_model=Token)
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):

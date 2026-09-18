@@ -31,6 +31,26 @@ class AuthService:
         )
         return Token(access_token=access_token, token_type="bearer")
 
+    def authenticate_user_by_email(self, email: str, password: str) -> Token:
+        user = self.user_repo.get_user_by_email(email)
+        if not user or not verify_password(password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is disabled",
+            )
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.email, "tenant_id": str(user.tenant_id), "user_id": str(user.id), "is_superuser": user.is_superuser},
+            expires_delta=access_token_expires
+        )
+        return Token(access_token=access_token, token_type="bearer")
+
     def get_current_user(self, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
         credentials_exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

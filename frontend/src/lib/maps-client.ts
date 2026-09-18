@@ -10,16 +10,114 @@ import type {
 } from "@/types/maps";
 import type { NearbySearchQuery, NearbySearchResponse, NearbyCafe } from "@/types/maps";
 
-class LeafletProviderStub implements MapProvider {
+interface NominatimAddress {
+  city?: string;
+  town?: string;
+  village?: string;
+  state?: string;
+  country?: string;
+  postcode?: string;
+}
+
+interface NominatimResult {
+  lat: string;
+  lon: string;
+  place_id?: number | string;
+  osm_id?: number | string;
+  display_name?: string;
+  address?: NominatimAddress;
+}
+
+interface LeafletIcon {
+  __leaflet_icon: true;
+}
+
+interface LeafletMarker {
+  addTo(map: LeafletMap): LeafletMarker;
+  bindPopup(content: string): LeafletMarker;
+  on(event: "click", callback: () => void): LeafletMarker;
+  remove(): void;
+}
+
+interface LeafletTileLayer {
+  addTo(map: LeafletMap): LeafletTileLayer;
+}
+
+interface LeafletFeatureGroup {
+  getBounds(): unknown;
+}
+
+interface LeafletMap {
+  setView(latLng: [number, number], zoom: number): LeafletMap;
+  panTo(latLng: [number, number]): LeafletMap;
+  fitBounds(bounds: unknown, options?: { padding?: [number, number]; maxZoom?: number }): LeafletMap;
+  invalidateSize(): void;
+  remove(): void;
+}
+
+interface LeafletNamespace {
+  map(container: HTMLElement, options?: { zoomControl?: boolean }): LeafletMap;
+  tileLayer(url: string, options: { attribution: string; maxZoom: number }): LeafletTileLayer;
+  marker(latLng: [number, number], options?: { icon?: LeafletIcon; title?: string }): LeafletMarker;
+  divIcon(options: { className: string; html: string; iconSize: [number, number]; iconAnchor: [number, number]; popupAnchor: [number, number] }): LeafletIcon;
+  featureGroup(markers: LeafletMarker[]): LeafletFeatureGroup;
+}
+
+declare global {
+  interface Window {
+    L?: LeafletNamespace;
+    __cybercafeLeafletPromise?: Promise<void>;
+    __cybercafe_map_provider?: MapProvider;
+  }
+}
+
+class LeafletOpenStreetMapProvider implements MapProvider {
   readonly name = "leaflet";
-  async load() {}
+
+  async load() {
+    if (typeof window === "undefined") return;
+    if (window.L) return;
+    if (window.__cybercafeLeafletPromise) {
+      await window.__cybercafeLeafletPromise;
+      return;
+    }
+
+    window.__cybercafeLeafletPromise = new Promise<void>((resolve, reject) => {
+      if (!document.querySelector('link[data-cybercafe-leaflet="css"]')) {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        link.dataset.cybercafeLeaflet = "css";
+        document.head.appendChild(link);
+      }
+
+      const existingScript = document.querySelector<HTMLScriptElement>('script[data-cybercafe-leaflet="js"]');
+      if (existingScript) {
+        existingScript.addEventListener("load", () => resolve(), { once: true });
+        existingScript.addEventListener("error", () => reject(new Error("Leaflet failed to load.")), { once: true });
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.async = true;
+      script.defer = true;
+      script.dataset.cybercafeLeaflet = "js";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Leaflet failed to load."));
+      document.head.appendChild(script);
+    });
+
+    await window.__cybercafeLeafletPromise;
+  }
+
   async geocode(q: string): Promise<GeocodeResult[]> {
     try {
       const endpoint = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5&addressdetails=1`;
       const r = await fetch(endpoint, { headers: { "Accept-Language": "en" } });
       if (!r.ok) return [];
-      const data = await r.json();
-      return (data || []).map((d: any) => ({
+      const data = (await r.json()) as NominatimResult[];
+      return (data || []).map((d) => ({
         latitude: parseFloat(d.lat),
         longitude: parseFloat(d.lon),
         placeId: String(d.place_id ?? d.osm_id ?? ""),
@@ -41,7 +139,7 @@ class LeafletProviderStub implements MapProvider {
         `https://nominatim.openstreetmap.org/reverse?lat=${p.latitude}&lon=${p.longitude}&format=json&addressdetails=1`
       );
       if (!r.ok) return null;
-      const d = await r.json();
+      const d = (await r.json()) as NominatimResult;
       return {
         latitude: p.latitude,
         longitude: p.longitude,
@@ -58,35 +156,122 @@ class LeafletProviderStub implements MapProvider {
       return null;
     }
   }
+
   renderMap(container: HTMLElement, opts: MapRenderOptions): MapHandle {
-    container.innerHTML = `
-      <div class="w-full h-full flex items-center justify-center bg-muted/40 border border-border rounded-lg text-muted-foreground text-xs text-center p-4">
-        <div>
-          <div class="font-semibold mb-1">Map placeholder — Leaflet/Google Maps adapter</div>
-          <div class="opacity-70">Center: ${opts.center.latitude.toFixed(4)}, ${opts.center.longitude.toFixed(4)}</div>
-          <div class="opacity-70 mt-1">${opts.markers?.length ?? 0} marker(s)</div>
-        </div>
-      </div>
-    `;
+    const L = window.L;
+    if (!L) {
+      container.innerHTML = `<div class="w-full h-full flex items-center justify-center bg-muted/40 text-muted-foreground text-xs">OpenStreetMap could not load.</div>`;
+      return {
+        destroy() {
+          container.innerHTML = "";
+        },
+        setCenter() {},
+        setMarkers() {},
+        panTo() {},
+      };
+    }
+
+    container.innerHTML = "";
+    const map = L.map(container, { zoomControl: true }).setView(
+      [opts.center.latitude, opts.center.longitude],
+      opts.zoom ?? 13
+    );
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    const userMarker = L.marker([opts.center.latitude, opts.center.longitude], {
+      icon: L.divIcon({
+        className: "cybercafe-user-marker",
+        html: `<span></span>`,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+        popupAnchor: [0, -11],
+      }),
+      title: "Your location",
+    }).bindPopup("You are here").addTo(map);
+
+    let cafeMarkers: LeafletMarker[] = [];
+
+    const applyMarkers = (markers: MapMarker[]) => {
+      cafeMarkers.forEach((marker) => marker.remove());
+      cafeMarkers = markers.map((marker) => {
+        const cafeMarker = L.marker([marker.position.latitude, marker.position.longitude], {
+          icon: L.divIcon({
+            className: "cybercafe-map-marker",
+            html: `<span style="background:${marker.color ?? "#2563eb"}"></span>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 28],
+            popupAnchor: [0, -26],
+          }),
+          title: marker.title,
+        })
+          .bindPopup(renderPopup(marker))
+          .on("click", () => opts.onMarkerClick?.(marker.id))
+          .addTo(map);
+
+        return cafeMarker;
+      });
+
+      const allMarkers = [userMarker, ...cafeMarkers];
+      if (allMarkers.length > 1) {
+        map.fitBounds(L.featureGroup(allMarkers).getBounds(), {
+          padding: [36, 36],
+          maxZoom: 15,
+        });
+      }
+    };
+
+    applyMarkers(opts.markers ?? []);
+    window.setTimeout(() => map.invalidateSize(), 100);
+
     return {
       destroy() {
-        container.innerHTML = "";
+        map.remove();
       },
-      setCenter() {},
-      setMarkers() {},
-      panTo() {},
+      setCenter(point) {
+        map.setView([point.latitude, point.longitude], opts.zoom ?? 13);
+      },
+      setMarkers(markers) {
+        applyMarkers(markers);
+      },
+      panTo(point) {
+        map.panTo([point.latitude, point.longitude]);
+      },
     };
   }
 }
 
-export const defaultMapProvider: MapProvider = new LeafletProviderStub();
+function renderPopup(marker: MapMarker) {
+  const verified = marker.isVerified ? `<div class="text-[11px] text-green-600 mt-1">Verified partner</div>` : "";
+  return `
+    <div class="min-w-[180px]">
+      <div class="font-semibold">${escapeHtml(marker.title ?? "Cyber Cafe")}</div>
+      <div class="text-xs text-slate-500 mt-1">${escapeHtml(marker.subtitle ?? "Nearby")}</div>
+      ${verified}
+    </div>
+  `;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+export const defaultMapProvider: MapProvider = new LeafletOpenStreetMapProvider();
 
 export function setMapProvider(p: MapProvider) {
-  (globalThis as any).__cybercafe_map_provider = p;
+  window.__cybercafe_map_provider = p;
 }
 
 export function getMapProvider(): MapProvider {
-  return (globalThis as any).__cybercafe_map_provider || defaultMapProvider;
+  return window.__cybercafe_map_provider || defaultMapProvider;
 }
 
 export async function searchNearbyCafes(
@@ -102,7 +287,11 @@ export async function searchNearbyCafes(
   if (q.onlyOpen) params.set("only_open", "1");
   q.servicesFilter?.forEach((s) => params.append("services_filter", s));
 
-  const res = await fetch(`/api/v1/cafes/nearby?${params.toString()}`);
+  const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+  const endpoint = apiBase
+    ? `${apiBase}/v1/cafes/nearby?${params.toString()}`
+    : `/api/v1/cafes/nearby?${params.toString()}`;
+  const res = await fetch(endpoint);
   if (!res.ok) {
     return {
       results: fallbackCafes(q),
@@ -115,21 +304,22 @@ export async function searchNearbyCafes(
         longitude: q.longitude,
         radiusKm: q.radiusKm ?? 5,
       },
+      source: "demo",
     };
   }
   const body = await res.json();
-  const results: NearbyCafe[] = (body.results || []).map((r: any) => ({
+  const results: NearbyCafe[] = (body.results || []).map((r: Record<string, unknown>) => ({
     id: String(r.id),
-    name: r.name,
-    publicLocation: r.public_location,
-    approximateDistanceKm: r.approximate_distance_km,
-    approximateDistanceMiles: r.approximate_distance_miles,
-    availableServices: r.available_services || [],
+    name: String(r.name),
+    publicLocation: String(r.public_location),
+    approximateDistanceKm: Number(r.approximate_distance_km),
+    approximateDistanceMiles: Number(r.approximate_distance_miles),
+    availableServices: Array.isArray(r.available_services) ? r.available_services.map(String) : [],
     isOpen: !!r.is_open,
     isVerified: !!r.is_verified,
-    description: r.description,
-    latitude: r.latitude,
-    longitude: r.longitude,
+    description: typeof r.description === "string" ? r.description : undefined,
+    latitude: typeof r.latitude === "number" ? r.latitude : undefined,
+    longitude: typeof r.longitude === "number" ? r.longitude : undefined,
   }));
   return {
     results,
@@ -142,6 +332,7 @@ export async function searchNearbyCafes(
       longitude: body.search_center?.longitude ?? q.longitude,
       radiusKm: body.search_center?.radius_km ?? q.radiusKm ?? 5,
     },
+    source: "api",
   };
 }
 

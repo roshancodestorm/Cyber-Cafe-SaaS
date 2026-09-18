@@ -5,6 +5,7 @@ from sqlalchemy import Uuid as UUID
 from sqlalchemy.orm import relationship
 from app.models.base import Base
 
+
 class Document(Base):
     __tablename__ = 'documents'
 
@@ -21,6 +22,11 @@ class Document(Base):
     status = Column(String, nullable=True, default='uploaded')
     max_opens = Column(Integer, nullable=True)
     open_count = Column(Integer, nullable=True, default=0)
+    watermark_type = Column(String, nullable=True)  # 'cafe', 'app', 'both'
+    watermark_status = Column(String, nullable=True)  # 'active', 'removed', 'paid'
+    watermark_opacity = Column(Integer, nullable=True, default=18)  # 15-20%
+    payment_id = Column(String, nullable=True)  # Razorpay payment ID
+    clean_document_key = Column(String, nullable=True)  # S3 key for clean version
     created_at = Column(DateTime, nullable=True, index=True, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=True, index=True, default=datetime.utcnow, onupdate=datetime.utcnow)
     deleted_at = Column(DateTime, nullable=True)

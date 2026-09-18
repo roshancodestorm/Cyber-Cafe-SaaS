@@ -36,7 +36,7 @@ export function SecuritySection() {
               Bank-grade Security for Your Cafe
             </h2>
             <p className="text-muted-foreground text-lg leading-relaxed">
-              Protect your business and your customers' data. Our system enforces strict security protocols ensuring terminal safety from viruses, unauthorized access, and malicious software.
+              Protect your business and your customers&apos; data. Our system enforces strict security protocols ensuring terminal safety from viruses, unauthorized access, and malicious software.
             </p>
             <ul className="space-y-5">
               {features.map((feat, idx) => (

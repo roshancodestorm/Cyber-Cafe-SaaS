@@ -1,7 +1,6 @@
 import { HeroSection } from "@/components/landing/hero-section";
 import { FeaturesSection } from "@/components/landing/features-section";
 import { HowItWorksSection } from "@/components/landing/how-it-works-section";
-import { NearbyCafesSection } from "@/components/landing/nearby-cafes-section";
 import { SecureSharingSection } from "@/components/landing/secure-sharing-section";
 import { AccessControlSection } from "@/components/landing/access-control-section";
 import { PrintingSection } from "@/components/landing/printing-section";
@@ -15,7 +14,6 @@ export default function LandingPage() {
   return (
     <div className="flex flex-col min-h-screen">
       <HeroSection />
-      <NearbyCafesSection />
       <FeaturesSection />
       <SecureSharingSection />
       <AccessControlSection />

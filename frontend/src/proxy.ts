@@ -1,37 +1,44 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 
-export function proxy(request: NextRequest) {
-  const token = request.cookies.get("next-auth.session-token")?.value
-    || request.cookies.get("__Secure-next-auth.session-token")?.value;
-  const isAuth = !!token;
-  const pathname = request.nextUrl.pathname;
-  const isAuthPage = pathname.startsWith("/login");
+export async function proxy(request: NextRequest) {
+  // getToken returns a Promise<JWT | null>
+  const token = await getToken({
+    req: request,
+    secret: process.env.NEXTAUTH_SECRET,
+  });
 
-  if (isAuthPage) {
-    if (isAuth) {
-      return NextResponse.redirect(new URL("/user", request.url));
-    }
-    return NextResponse.next();
+  const path = request.nextUrl.pathname;
+
+  // Protect user routes - redirect to signup if not authenticated
+  if (path.startsWith("/user") && !token) {
+    const signupUrl = new URL(`/signup?from=${encodeURIComponent(path)}`, request.url);
+    return NextResponse.redirect(signupUrl);
   }
 
-  if (!isAuth) {
-    let from = pathname;
-    if (request.nextUrl.search) {
-      from += request.nextUrl.search;
-    }
-    return NextResponse.redirect(
-      new URL(`/login?from=${encodeURIComponent(from)}`, request.url)
-    );
+  // Protect admin routes - redirect to login if not authenticated
+  if (path.startsWith("/admin") && !token) {
+    const loginUrl = new URL(`/login?from=${encodeURIComponent(path)}`, request.url);
+    return NextResponse.redirect(loginUrl);
   }
 
-  if (pathname.startsWith("/admin")) {
-    // TODO: verify admin role from JWT payload if needed
+  // If user is not admin but tries to access admin, redirect to user
+  if (path.startsWith("/admin") && token?.role !== "admin") {
+    const userUrl = new URL("/user", request.url);
+    return NextResponse.redirect(userUrl);
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/user/:path*", "/login"],
+  matcher: [
+    "/user/:path*",
+    "/admin/:path*",
+    "/login",
+    "/signup",
+    "/register/cafe",
+    "/api/auth/providers",
+  ],
 };

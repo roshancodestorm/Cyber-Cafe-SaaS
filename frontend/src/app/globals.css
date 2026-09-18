@@ -55,18 +55,18 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --primary: oklch(0.55 0.22 265);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --accent: oklch(0.94 0.04 260);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: oklch(0.55 0.22 265);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -75,12 +75,13 @@
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary: oklch(0.55 0.22 265);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.94 0.04 260);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-ring: oklch(0.55 0.22 265);
+  --button-blue-hover: oklch(0.60 0.23 262);
 }
 
 .dark {
@@ -115,17 +116,87 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --button-blue-hover: oklch(0.55 0.22 265);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html,
+  body {
+    transition:
+      background-color 450ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      color 450ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      border-color 450ms cubic-bezier(0.22, 0.61, 0.36, 1);
+    will-change: background-color, color;
+  }
   body {
     @apply bg-background text-foreground;
   }
   html {
     @apply font-sans;
+  }
+  a, button, [role="button"] {
+    transition:
+      background-color 250ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      color 250ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      border-color 250ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      box-shadow 250ms cubic-bezier(0.22, 0.61, 0.36, 1),
+      transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+    will-change: transform, background-color;
+  }
+}
+
+/* ────────────────────────────────────────────
+   Button Hover Styles: Blue Hover + Animations (Mode-aware)
+   ──────────────────────────────────────────── */
+@layer components {
+  /* Default blue hover for interactive buttons — applied via global CSS
+     so we don't depend on class-name substring matching. */
+  :root {
+    --btn-hover-bg: var(--button-blue-hover);
+    --btn-hover-text: #ffffff;
+    --btn-hover-border: var(--button-blue-hover);
+    --btn-hover-shadow:
+      0 6px 20px -6px color-mix(in oklch, var(--button-blue-hover) 55%, transparent),
+      0 2px 6px -2px color-mix(in oklch, var(--button-blue-hover) 30%, transparent);
+  }
+  .dark {
+    --btn-hover-bg: rgba(59, 130, 246, 0.15);
+    --btn-hover-text: rgb(147, 197, 253);
+    --btn-hover-border: rgba(59, 130, 246, 0.35);
+    --btn-hover-shadow: 0 6px 20px -8px rgba(59, 130, 246, 0.5);
+  }
+  .interactive-btn {
+    position: relative;
+    overflow: hidden;
+  }
+  .interactive-btn:hover {
+    background-color: var(--btn-hover-bg) !important;
+    color: var(--btn-hover-text) !important;
+    border-color: var(--btn-hover-border) !important;
+    box-shadow: var(--btn-hover-shadow);
+    transform: translateY(-1px) scale(1.02);
+  }
+  .interactive-btn:active {
+    transform: translateY(0px) scale(0.98) !important;
+  }
+  .interactive-btn::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      circle at 50% 50%,
+      color-mix(in oklch, white 22%, transparent),
+      transparent 65%
+    );
+    opacity: 0;
+    transition: opacity 250ms ease-out;
+    pointer-events: none;
+  }
+  .interactive-btn:hover::after {
+    opacity: 1;
   }
 }
 
@@ -221,4 +292,40 @@
 .admin-page h2,
 .admin-page h3 {
   color: var(--admin-text);
+}
+
+.cybercafe-map-marker,
+.cybercafe-user-marker {
+  background: transparent;
+  border: 0;
+}
+
+.cybercafe-map-marker span {
+  border: 3px solid white;
+  border-radius: 999px 999px 999px 0;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
+  display: block;
+  height: 28px;
+  transform: rotate(-45deg);
+  width: 28px;
+}
+
+.cybercafe-map-marker span::after {
+  background: white;
+  border-radius: 999px;
+  content: "";
+  display: block;
+  height: 8px;
+  margin: 7px;
+  width: 8px;
+}
+
+.cybercafe-user-marker span {
+  background: #2563eb;
+  border: 3px solid white;
+  border-radius: 999px;
+  box-shadow: 0 0 0 8px rgba(37, 99, 235, 0.18), 0 8px 20px rgba(0, 0, 0, 0.3);
+  display: block;
+  height: 22px;
+  width: 22px;
 }

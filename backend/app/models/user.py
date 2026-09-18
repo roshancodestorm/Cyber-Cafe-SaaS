@@ -25,6 +25,6 @@ class User(Base):
     notifications = relationship('Notification')
     payments = relationship('Payment')
     permissions = relationship('Permission')
-    sent_permission_requests = relationship('PermissionRequest')
-    received_permission_requests = relationship('PermissionRequest')
+    sent_permission_requests = relationship('PermissionRequest', foreign_keys='PermissionRequest.requester_id')
+    received_permission_requests = relationship('PermissionRequest', foreign_keys='PermissionRequest.owner_id')
     subscriptions = relationship('Subscription')

@@ -24,7 +24,7 @@ export function SecureSharingSection() {
               Secure Document Sharing
             </h2>
             <p className="text-muted-foreground text-lg leading-relaxed">
-              Don't risk your sensitive files on public networks. Our encrypted sharing vault lets you upload documents securely before you arrive and access them only when authenticated at the terminal.
+              Don&apos;t risk your sensitive files on public networks. Our encrypted sharing vault lets you upload documents securely before you arrive and access them only when authenticated at the terminal.
             </p>
             <ul className="space-y-4 pt-4">
               <li className="flex items-start gap-3">

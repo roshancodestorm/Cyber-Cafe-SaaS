@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from app.models.document import Document
-from app.schemas.document import DocumentCreate
 import uuid
+
 
 class DocumentRepository:
     def __init__(self, db: Session):
@@ -16,3 +16,18 @@ class DocumentRepository:
         self.db.commit()
         self.db.refresh(db_document)
         return db_document
+
+    def update(self, document: Document) -> Document:
+        self.db.add(document)
+        self.db.commit()
+        self.db.refresh(document)
+        return document
+
+    def list_by_tenant(self, tenant_id: uuid.UUID, skip: int = 0, limit: int = 50) -> list[Document]:
+        return (
+            self.db.query(Document)
+            .filter(Document.tenant_id == tenant_id, Document.deleted_at.is_(None))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )

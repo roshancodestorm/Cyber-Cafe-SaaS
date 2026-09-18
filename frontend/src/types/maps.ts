@@ -82,6 +82,7 @@ export interface NearbySearchResponse {
   pageSize: number;
   totalPages: number;
   searchCenter: { latitude: number; longitude: number; radiusKm: number };
+  source?: "api" | "demo";
 }
 
 export type LocationPermissionState = "idle" | "prompting" | "granted" | "denied" | "error";

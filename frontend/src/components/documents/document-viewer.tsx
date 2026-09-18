@@ -170,7 +170,7 @@ export function DocumentViewer({ documentId }: DocumentViewerProps) {
           <AlertCircle />
           <AlertTitle>Tab switch detected</AlertTitle>
           <AlertDescription>
-            This document is view-only. Leaving or screenshotting this tab may be logged by the cafe's security policy.
+            This document is view-only. Leaving or screenshotting this tab may be logged by the cafe&apos;s security policy.
           </AlertDescription>
         </Alert>
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MapPin, Navigation, Search, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,10 +18,9 @@ import type {
   NearbyCafe,
   NearbySearchResponse,
   MapMarker,
+  MapHandle,
 } from "@/types/maps";
 import { cn } from "@/lib/utils";
-import { useCallback } from "react";
-import { Search as SearchIcon } from "lucide-react";
 
 interface MapsCafeDiscoveryProps {
   onSelect?: (cafe: NearbyCafe) => void;
@@ -35,7 +34,7 @@ export function MapsCafeDiscovery({
   showFallbackMap = true,
 }: MapsCafeDiscoveryProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapHandleRef = useRef<any>(null);
+  const mapHandleRef = useRef<MapHandle | null>(null);
 
   const [location, setLocation] = useState<LocationState>({
     permission: "idle",
@@ -54,6 +53,43 @@ export function MapsCafeDiscovery({
   });
 
   const center: GeoPoint = location.current ?? fallbackLatLng;
+
+  const updateMarkers = useCallback(
+    (cafes: NearbyCafe[], pt: GeoPoint) => {
+      if (!mapContainerRef.current || !showFallbackMap) return;
+      const provider = getMapProvider();
+      if (mapHandleRef.current) {
+        mapHandleRef.current.destroy();
+        mapHandleRef.current = null;
+      }
+      provider.load().then(() => {
+        const markers: MapMarker[] = cafes.map((c) => ({
+          id: c.id,
+          position: {
+            latitude: c.latitude ?? pt.latitude,
+            longitude: c.longitude ?? pt.longitude,
+          },
+          title: c.name,
+          subtitle: c.publicLocation,
+          isVerified: c.isVerified,
+          color: c.isVerified ? "#16a34a" : "#64748b",
+        }));
+        if (mapContainerRef.current) {
+          mapHandleRef.current = provider.renderMap(mapContainerRef.current, {
+            center: pt,
+            zoom: 13,
+            markers,
+            onMarkerClick: (id) => {
+              setSelectedId(id);
+              const cafe = cafes.find((x) => x.id === id);
+              if (cafe && onSelect) onSelect(cafe);
+            },
+          });
+        }
+      });
+    },
+    [onSelect, showFallbackMap]
+  );
 
   const doSearch = useCallback(
     async (pt: GeoPoint) => {
@@ -74,42 +110,8 @@ export function MapsCafeDiscovery({
         setLoading(false);
       }
     },
-    [radius, onlyVerified, onlyOpen]
+    [onlyOpen, onlyVerified, radius, updateMarkers]
   );
-
-  const updateMarkers = (cafes: NearbyCafe[], pt: GeoPoint) => {
-    if (!mapContainerRef.current || !showFallbackMap) return;
-    const provider = getMapProvider();
-    if (mapHandleRef.current) {
-      mapHandleRef.current.destroy();
-      mapHandleRef.current = null;
-    }
-    provider.load().then(() => {
-      const markers: MapMarker[] = cafes.map((c) => ({
-        id: c.id,
-        position: {
-          latitude: c.latitude ?? pt.latitude,
-          longitude: c.longitude ?? pt.longitude,
-        },
-        title: c.name,
-        subtitle: c.publicLocation,
-        isVerified: c.isVerified,
-        color: c.isVerified ? "#16a34a" : "#64748b",
-      }));
-      if (mapContainerRef.current) {
-        mapHandleRef.current = provider.renderMap(mapContainerRef.current, {
-          center: pt,
-          zoom: 13,
-          markers,
-          onMarkerClick: (id) => {
-            setSelectedId(id);
-            const cafe = cafes.find((x) => x.id === id);
-            if (cafe && onSelect) onSelect(cafe);
-          },
-        });
-      }
-    });
-  };
 
   const askForLocation = async () => {
     setLocation((s) => ({ ...s, permission: "prompting", errorMessage: undefined }));
@@ -172,7 +174,7 @@ export function MapsCafeDiscovery({
   const statusLabel: Record<LocationPermissionState, string> = {
     idle: "Locate me to find nearby cafes",
     prompting: "Requesting location…",
-    granted: "Showing cafes near you",
+    granted: "OpenStreetMap is showing cafes near you",
     denied: "Using search/demo coordinates",
     error: "Something went wrong with location",
   };
@@ -212,6 +214,12 @@ export function MapsCafeDiscovery({
             </div>
           )}
 
+          {results?.source === "demo" && (
+            <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+              Showing demo cafes — could not reach the cafe service. Real cafes will appear once the API is available.
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Search className="h-4 w-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -226,7 +234,7 @@ export function MapsCafeDiscovery({
               />
             </div>
             <Button size="sm" className="gap-1" onClick={searchPlace} disabled={loading}>
-              <SearchIcon className="h-3.5 w-3.5" />
+              <Search className="h-3.5 w-3.5" />
               Search
             </Button>
           </div>

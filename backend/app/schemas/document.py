@@ -38,3 +38,33 @@ class DocumentResponse(DocumentBase):
 
     class Config:
         from_attributes = True
+
+
+# Watermark schemas
+class WatermarkInfo(BaseModel):
+    watermark_type: str  # 'cafe', 'app', 'both', 'none'
+    watermark_status: str  # 'active', 'removed', 'paid'
+    opacity: int  # 15-20%
+    has_clean_version: bool
+    payment_verified: bool
+
+
+class WatermarkRemovalRequest(BaseModel):
+    document_id: str
+    removal_price_inr: int  # Price in Indian Rupees
+    payment_required: bool
+    message: str
+
+
+# Enhancement schemas
+class DocumentEnhancementRequest(BaseModel):
+    quality_threshold: int = 70  # Enhance if quality below this score
+    upscale: bool = True  # Whether to upscale low-res images
+
+
+class EnhancementResult(BaseModel):
+    enhanced_document_key: str
+    original_quality_score: int
+    enhancement_applied: bool
+    text_extracted: bool
+    message: str

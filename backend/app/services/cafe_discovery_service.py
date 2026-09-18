@@ -1,8 +1,11 @@
 import uuid
 import math
+import time
+import threading
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+import httpx
 from app.repositories.cafe_repository import CafeRepository, is_cafe_open, haversine_distance_km
 from app.models.cafe import Cafe
 from app.schemas.cafe import (
@@ -11,6 +14,119 @@ from app.schemas.cafe import (
     NearbyCafeSearchResponse,
     CafeCreate,
 )
+
+OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+]
+
+_osm_cache: dict = {}
+_osm_cache_lock = threading.Lock()
+_OSM_CACHE_TTL_SECONDS = 300
+
+
+def _cache_key(lat: float, lon: float, radius_km: float) -> str:
+    return f"{round(lat, 3)}:{round(lon, 3)}:{round(radius_km, 1)}"
+
+
+def _overpass_query(lat: float, lon: float, radius_km: float) -> str:
+    radius_m = int(radius_km * 1000)
+    return (
+        "[out:json][timeout:20];"
+        "("
+        f'node["amenity"="internet_cafe"](around:{radius_m},{lat},{lon});'
+        f'way["amenity"="internet_cafe"](around:{radius_m},{lat},{lon});'
+        ");"
+        "out center tags;"
+    )
+
+
+def _build_osm_location(tags: dict, lat: float, lon: float) -> str:
+    parts = []
+    street = tags.get("addr:street")
+    housenumber = tags.get("addr:housenumber")
+    if street and housenumber:
+        parts.append(f"{housenumber} {street}")
+    elif street:
+        parts.append(street)
+    for key in ("addr:suburb", "addr:neighbourhood", "addr:village", "addr:city"):
+        if tags.get(key):
+            parts.append(tags[key])
+            break
+    if not parts:
+        parts.append(f"{lat:.4f}, {lon:.4f}")
+    return ", ".join(parts)
+
+
+def _osm_element_to_cafe(el: dict, origin_lat: float, origin_lon: float) -> Optional[NearbyCafePublic]:
+    el_type = el.get("type")
+    el_id = el.get("id")
+    tags = el.get("tags") or {}
+    if el_type == "node":
+        lat = el.get("lat")
+        lon = el.get("lon")
+    else:
+        center = el.get("center") or {}
+        lat = center.get("lat")
+        lon = center.get("lon")
+    if lat is None or lon is None:
+        return None
+    dist_km = haversine_distance_km(origin_lat, origin_lon, float(lat), float(lon))
+    name = tags.get("name") or tags.get("brand") or tags.get("operator") or "Internet Cafe"
+    services = ["internet"]
+    if tags.get("internet_access"):
+        services.append(str(tags["internet_access"]))
+    stable_id = uuid.uuid5(uuid.NAMESPACE_URL, f"https://www.openstreetmap.org/{el_type}/{el_id}")
+    return NearbyCafePublic(
+        id=stable_id,
+        name=name,
+        public_location=_build_osm_location(tags, float(lat), float(lon)),
+        approximate_distance_km=round(dist_km, 2),
+        approximate_distance_miles=round(dist_km * 0.621371, 2),
+        available_services=services,
+        is_open=True,
+        is_verified=False,
+        description=tags.get("description"),
+        latitude=float(lat),
+        longitude=float(lon),
+    )
+
+
+def fetch_osm_internet_cafes(lat: float, lon: float, radius_km: float) -> List[NearbyCafePublic]:
+    key = _cache_key(lat, lon, radius_km)
+    with _osm_cache_lock:
+        cached = _osm_cache.get(key)
+        if cached and time.time() - cached[0] < _OSM_CACHE_TTL_SECONDS:
+            return cached[1]
+    query = _overpass_query(lat, lon, radius_km)
+    elements: List[dict] = []
+    for endpoint in OVERPASS_ENDPOINTS:
+        try:
+            resp = httpx.post(
+                endpoint,
+                data={"data": query},
+                timeout=15.0,
+                headers={"User-Agent": "CyberCafeSaas/1.0 (cafe discovery)"},
+            )
+            if resp.status_code == 200:
+                elements = resp.json().get("elements", [])
+                break
+        except Exception:
+            continue
+    cafes: List[NearbyCafePublic] = []
+    seen = set()
+    for el in elements:
+        ident = (el.get("type"), el.get("id"))
+        if ident in seen:
+            continue
+        seen.add(ident)
+        mapped = _osm_element_to_cafe(el, lat, lon)
+        if mapped is not None:
+            cafes.append(mapped)
+    cafes.sort(key=lambda c: c.approximate_distance_km)
+    with _osm_cache_lock:
+        _osm_cache[key] = (time.time(), cafes)
+    return cafes
 
 
 class MapsProvider:
@@ -61,22 +177,22 @@ class CafeDiscoveryService:
         return ", ".join(p for p in parts if p)
 
     def search_nearby(self, req: NearbyCafeSearchRequest, viewer_timezone: Optional[str] = None) -> NearbyCafeSearchResponse:
-        cafes, total = self.cafe_repo.find_nearby(
+        cafes, _ = self.cafe_repo.find_nearby(
             lat=req.latitude,
             lon=req.longitude,
             radius_km=req.radius_km,
-            page=req.page,
-            page_size=req.page_size,
+            page=1,
+            page_size=100000,
             only_verified=req.only_verified,
             services_filter=req.services_filter,
         )
-        results: List[NearbyCafePublic] = []
+        combined: List[NearbyCafePublic] = []
         for c in cafes:
             dist_km = self.cafe_repo.compute_distance(c, req.latitude, req.longitude)
             open_now = is_cafe_open(c)
             if req.only_open and not open_now:
                 continue
-            results.append(
+            combined.append(
                 NearbyCafePublic(
                     id=c.id,
                     name=self.get_cafe_public_name(c),
@@ -91,11 +207,25 @@ class CafeDiscoveryService:
                     longitude=c.longitude,
                 )
             )
-        if req.only_open:
-            total = len(results)
+        try:
+            osm_cafes = fetch_osm_internet_cafes(req.latitude, req.longitude, req.radius_km)
+        except Exception:
+            osm_cafes = []
+        if not req.only_verified:
+            combined.extend(osm_cafes)
+        seen_ids = set()
+        deduped: List[NearbyCafePublic] = []
+        for cafe in sorted(combined, key=lambda r: r.approximate_distance_km):
+            if cafe.id in seen_ids:
+                continue
+            seen_ids.add(cafe.id)
+            deduped.append(cafe)
+        total = len(deduped)
+        offset = (req.page - 1) * req.page_size
+        paged = deduped[offset:offset + req.page_size]
         total_pages = max(1, math.ceil(total / req.page_size))
         return NearbyCafeSearchResponse(
-            results=results,
+            results=paged,
             total=total,
             page=req.page,
             page_size=req.page_size,

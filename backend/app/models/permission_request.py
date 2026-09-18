@@ -18,5 +18,5 @@ class PermissionRequest(Base):
     updated_at = Column(DateTime, nullable=True, index=True, default=datetime.utcnow, onupdate=datetime.utcnow)
     tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     document = relationship('Document')
-    requester = relationship('User')
-    owner = relationship('User')
+    requester = relationship('User', foreign_keys=[requester_id])
+    owner = relationship('User', foreign_keys=[owner_id])

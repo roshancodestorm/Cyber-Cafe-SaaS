@@ -1,6 +1,8 @@
 from fastapi import FastAPI
-from app.api.v1 import auth, users, documents, permissions, cafes, jobs, print_queue, notifications, image, payments
+from fastapi.middleware.cors import CORSMiddleware
+from app.api.v1 import auth, users, documents, permissions, cafes, jobs, print_queue, notifications, image, payments, security, audit
 from app.core.config import settings
+from app import models
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -9,6 +11,18 @@ app = FastAPI(
     docs_url="/api/v1/docs",
     redoc_url="/api/v1/redoc",
     openapi_url="/api/v1/openapi.json"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://192.168.31.248:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
@@ -21,6 +35,8 @@ app.include_router(print_queue.router, prefix="/api/v1/print", tags=["Print Queu
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notifications"])
 app.include_router(image.router, prefix="/api/v1/images", tags=["Images"])
 app.include_router(payments.router, prefix="/api/v1/payments", tags=["Payments"])
+app.include_router(security.router, prefix="/api/v1/security", tags=["Security & QR"])
+app.include_router(audit.router, prefix="/api/v1/audit", tags=["Audit"])
 
 
 @app.get("/api/v1/health", tags=["Health Check"])

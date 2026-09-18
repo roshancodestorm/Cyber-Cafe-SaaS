@@ -29,7 +29,7 @@ export function FaqSection() {
             transition={{ delay: 0.1 }}
             className="text-muted-foreground text-lg max-w-2xl mx-auto"
           >
-            Got questions? We've got answers. If you need more info, contact our support team.
+            Got questions? We&apos;ve got answers. If you need more info, contact our support team.
           </motion.p>
         </div>
         <motion.div 

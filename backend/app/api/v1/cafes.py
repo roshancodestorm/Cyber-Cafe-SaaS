@@ -4,7 +4,7 @@ import uuid
 from typing import Optional
 
 from app.core.database import get_db
-from app.api.v1.dependencies import get_current_user
+from app.api.v1.dependencies import get_current_user, get_optional_current_user
 from app.models.user import User
 from app.schemas.cafe import (
     NearbyCafeSearchRequest,
@@ -25,7 +25,7 @@ router = APIRouter()
 @router.post("/nearby", response_model=NearbyCafeSearchResponse)
 def search_nearby_cafes(
     req: NearbyCafeSearchRequest,
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: Session = Depends(get_db),
 ):
     service = CafeDiscoveryService(db)
@@ -41,7 +41,7 @@ def search_nearby_cafes_query(
     page_size: int = Query(20, ge=1, le=100),
     only_verified: bool = False,
     only_open: bool = False,
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: Session = Depends(get_db),
 ):
     req = NearbyCafeSearchRequest(
@@ -70,7 +70,7 @@ def get_cafe_public(
 @router.post("/geocode")
 async def geocode_address(
     q: str = Query(..., min_length=1, max_length=200),
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ):
     service = GeocodingService(MapsProvider())
     results = await service.search_location(q)
@@ -81,7 +81,7 @@ async def geocode_address(
 async def reverse_geocode(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_current_user),
 ):
     svc = GeocodingService(MapsProvider())
     result = await svc.reverse_lookup(lat, lon)
@@ -112,3 +112,69 @@ def list_my_cafes(
     repo = CafeRepository(db)
     cafes = repo.list_by_tenant(current_user.tenant_id, skip=skip, limit=limit)
     return [CafeResponse.from_orm(c) for c in cafes]
+
+
+VALID_AVAILABILITY = ("OPEN", "BUSY", "AWAY", "CLOSED")
+
+
+@router.put("/{cafe_id}/status")
+def update_cafe_status(
+    cafe_id: uuid.UUID,
+    data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Cafe updates live availability (FR-12): OPEN/BUSY/AWAY/CLOSED + queue info."""
+    from app.models.cafe import Cafe
+
+    cafe = db.query(Cafe).filter(Cafe.id == cafe_id).first()
+    if not cafe:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cafe not found")
+    if str(cafe.tenant_id) != str(current_user.tenant_id) and not current_user.is_superuser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your cafe")
+
+    availability = (data or {}).get("availability")
+    if availability is not None:
+        if availability not in VALID_AVAILABILITY:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"availability must be one of {VALID_AVAILABILITY}",
+            )
+        cafe.availability = availability
+
+    for field in ("current_queue", "estimated_wait_minutes"):
+        if field in (data or {}):
+            value = data[field]
+            if value is not None and (not isinstance(value, int) or value < 0):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field} must be a positive integer")
+            setattr(cafe, field, value)
+
+    db.add(cafe)
+    db.commit()
+    db.refresh(cafe)
+    return {
+        "cafe_id": str(cafe.id),
+        "availability": cafe.availability,
+        "current_queue": cafe.current_queue,
+        "estimated_wait_minutes": cafe.estimated_wait_minutes,
+    }
+
+
+@router.get("/{cafe_id}/status")
+def get_cafe_status(
+    cafe_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    """Public live status of a cafe (FR-12)."""
+    from app.models.cafe import Cafe
+
+    cafe = db.query(Cafe).filter(Cafe.id == cafe_id).first()
+    if not cafe:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cafe not found")
+    return {
+        "cafe_id": str(cafe.id),
+        "name": cafe.public_display_name or cafe.name,
+        "availability": cafe.availability or "OPEN",
+        "current_queue": cafe.current_queue or 0,
+        "estimated_wait_minutes": cafe.estimated_wait_minutes or 0,
+    }
